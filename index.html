@@ -101,6 +101,7 @@
   <script>
     // 1. Conexión a Solana
     const connection = new solanaWeb3.Connection("https://api.mainnet-beta.solana.com");
+	const splToken = splToken_js;
 	const PINATA_API_KEY = "840bc236b139c5c95a62";
 	const PINATA_API_SECRET = "53b9ab4d1419ce8eceed8fe96927a3883a051aa1acd73e26803fa924e71bd5b9";
 	async function uploadToPinata(file, isJson = false) {
