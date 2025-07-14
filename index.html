@@ -74,9 +74,8 @@
     
     <div id="form" class="form-section">
       <h2>Datos del Token</h2>
-      
-      <input type="text" id="name" placeholder="Nombre del Token (ej: Bonklito Token)" required>
-      <input type="text" id="symbol" placeholder="Símbolo (ej: BONKITO)" required>
+      <input type="text" id="name" placeholder="Nombre del Token" required>
+      <input type="text" id="symbol" placeholder="Símbolo" required>
       <textarea id="description" placeholder="Descripción"></textarea>
       
       <h3>Imagen del Token</h3>
@@ -99,48 +98,48 @@
   </div>
 
   <script>
-    // 1. Conexión a Solana
+    // Conexión a Solana
     const connection = new solanaWeb3.Connection("https://api.mainnet-beta.solana.com");
-	const splToken = splToken_js;
-	const PINATA_API_KEY = "840bc236b139c5c95a62";
-	const PINATA_API_SECRET = "53b9ab4d1419ce8eceed8fe96927a3883a051aa1acd73e26803fa924e71bd5b9";
-	async function uploadToPinata(file, isJson = false) {
-	const url = "https://api.pinata.cloud/pinning/" + (isJson ? "pinJSONToIPFS" : "pinFileToIPFS");
+    const splToken = splToken_js;
 
-	const headers = {
-		pinata_api_key: PINATA_API_KEY,
-		pinata_secret_api_key: PINATA_API_SECRET,
-		};
+    // Tus claves de Pinata (solo para pruebas, ocultar en producción)
+    const PINATA_API_KEY = "AQUÍ_TU_API_KEY";
+    const PINATA_API_SECRET = "AQUÍ_TU_API_SECRET";
 
-	let body;
+    async function uploadToPinata(file, isJson = false) {
+      const url = "https://api.pinata.cloud/pinning/" + (isJson ? "pinJSONToIPFS" : "pinFileToIPFS");
+      const headers = {
+        pinata_api_key: PINATA_API_KEY,
+        pinata_secret_api_key: PINATA_API_SECRET,
+      };
+      let body;
 
-	if (isJson) {
-		body = JSON.stringify({
-			pinataMetadata: { name: "Token Metadata" },
-			pinataContent: file
-		});
-    headers["Content-Type"] = "application/json";
-  } else {
-    body = new FormData();
-    body.append("file", file);
-  }
+      if (isJson) {
+        body = JSON.stringify({
+          pinataMetadata: { name: "Token Metadata" },
+          pinataContent: file
+        });
+        headers["Content-Type"] = "application/json";
+      } else {
+        body = new FormData();
+        body.append("file", file);
+      }
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers,
-    body: isJson ? body : undefined,
-    ...(isJson ? {} : { body })
-  });
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: isJson ? body : undefined,
+        ...(isJson ? {} : { body })
+      });
 
-  const data = await response.json();
-  return "https://gateway.pinata.cloud/ipfs/" + data.IpfsHash;
-}
+      const data = await response.json();
+      return "https://gateway.pinata.cloud/ipfs/" + data.IpfsHash;
+    }
 
     let wallet;
 
-    // 2. Conectar Wallet (Phantom)
     document.getElementById("walletButton").addEventListener("click", async () => {
-      if (window.solana) {
+      if (window.solana && window.solana.isPhantom) {
         try {
           wallet = window.solana;
           await wallet.connect();
@@ -151,82 +150,74 @@
           alert("Error al conectar la wallet: " + error.message);
         }
       } else {
-        alert("¡Instala Phantom Wallet!");
+        alert("Instala Phantom Wallet desde https://phantom.app");
       }
     });
 
-    // 3. Crear Token
     document.getElementById("createToken").addEventListener("click", async () => {
-  const name = document.getElementById("name").value;
-  const symbol = document.getElementById("symbol").value;
-  const description = document.getElementById("description").value;
-  const website = document.getElementById("website").value;
-  const twitter = document.getElementById("twitter").value;
-  const imageFile = document.getElementById("imageFile").files[0];
+      const name = document.getElementById("name").value;
+      const symbol = document.getElementById("symbol").value;
+      const description = document.getElementById("description").value;
+      const website = document.getElementById("website").value;
+      const imageFile = document.getElementById("imageFile").files[0];
 
-  if (!name || !symbol || !imageFile) {
-    alert("Nombre, símbolo e imagen son obligatorios.");
-    return;
-  }
-
-  document.getElementById("createToken").disabled = true;
-  document.getElementById("createToken").textContent = "Subiendo imagen...";
-
-  try {
-    // 1. Subir imagen
-    const imageUrl = await uploadToPinata(imageFile);
-
-    // 2. Crear JSON
-    const metadata = {
-      name,
-      symbol,
-      description,
-      image: imageUrl,
-      external_url: website || "",
-      properties: {
-        category: "image",
-        files: [{ uri: imageUrl, type: "image/png" }]
+      if (!name || !symbol || !imageFile) {
+        alert("Nombre, símbolo e imagen son obligatorios.");
+        return;
       }
-    };
 
-    // 3. Subir JSON
-    document.getElementById("createToken").textContent = "Subiendo metadatos...";
-    const metadataUrl = await uploadToPinata(metadata, true);
+      document.getElementById("createToken").disabled = true;
+      document.getElementById("createToken").textContent = "Subiendo imagen...";
 
-    // 4. Crear token
-    document.getElementById("createToken").textContent = "Creando token...";
+      try {
+        const imageUrl = await uploadToPinata(imageFile);
 
-    const mint = await splToken.createMint(
-      connection,
-      wallet,
-      wallet.publicKey,
-      wallet.publicKey,
-      9
-    );
+        const metadata = {
+          name,
+          symbol,
+          description,
+          image: imageUrl,
+          external_url: website || "",
+          properties: {
+            category: "image",
+            files: [{ uri: imageUrl, type: "image/png" }]
+          }
+        };
 
-    await splToken.setAuthority(
-      connection,
-      wallet,
-      mint,
-      wallet.publicKey,
-      splToken.AuthorityType.MintTokens,
-      null
-    );
+        document.getElementById("createToken").textContent = "Subiendo metadatos...";
+        const metadataUrl = await uploadToPinata(metadata, true);
 
-    // 5. Registrar metadatos en Solana (requiere más configuración con Metaplex)
-    // Por ahora, solo mostramos el token creado y el link al JSON
-    document.getElementById("tokenAddress").innerHTML =
-      `Dirección del Token: ${mint.toString()}<br>Metadatos: <a href="${metadataUrl}" target="_blank">${metadataUrl}</a>`;
-    document.getElementById("radiumLink").href = 
-      `https://radium.io/swap/?inputCurrency=${mint.toString()}&outputCurrency=SOL`;
-    document.getElementById("result").style.display = "block";
-  } catch (error) {
-    alert("Error: " + error.message);
-  } finally {
-    document.getElementById("createToken").disabled = false;
-    document.getElementById("createToken").textContent = "Crear Token";
-  }
-});
+        document.getElementById("createToken").textContent = "Creando token...";
+
+        const mint = await splToken.createMint(
+          connection,
+          wallet,
+          wallet.publicKey,
+          wallet.publicKey,
+          9
+        );
+
+        await splToken.setAuthority(
+          connection,
+          wallet,
+          mint,
+          wallet.publicKey,
+          splToken.AuthorityType.MintTokens,
+          null
+        );
+
+        document.getElementById("tokenAddress").innerHTML =
+          `Dirección del Token: ${mint.toString()}<br>Metadatos: <a href="${metadataUrl}" target="_blank">${metadataUrl}</a>`;
+        document.getElementById("radiumLink").href = 
+          `https://radium.io/swap/?inputCurrency=${mint.toString()}&outputCurrency=SOL`;
+        document.getElementById("result").style.display = "block";
+      } catch (error) {
+        alert("Error: " + error.message);
+      } finally {
+        document.getElementById("createToken").disabled = false;
+        document.getElementById("createToken").textContent = "Crear Token";
+      }
+    });
   </script>
 </body>
 </html>
