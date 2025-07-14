@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solana Token Creator</title>
+  <script src="https://unpkg.com/@solana/web3.js@1.73.0/lib/index.iife.min.js"></script>
+  <script src="https://unpkg.com/@solana/spl-token@0.3.8/lib/index.iife.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    #walletButton {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background-color: #512da8;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    input, textarea, button {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    #createToken {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    #result {
+      margin-top: 20px;
+      padding: 10px;
+      background-color: #e8f5e9;
+      border-radius: 5px;
+      display: none;
+    }
+    .form-section {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+    .form-section.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+  </style>
+</head>
+<body>
+  <button id="walletButton">Conectar Wallet</button>
+  
+  <div class="card">
+    <h1>Solana Token Creator</h1>
+    <p>Crea tu token SPL en Solana sin pagar fees adicionales.</p>
+    
+    <div id="form" class="form-section">
+      <h2>Datos del Token</h2>
+      
+      <input type="text" id="name" placeholder="Nombre del Token (ej: Bonklito Token)" required>
+      <input type="text" id="symbol" placeholder="Símbolo (ej: BONKITO)" required>
+      <textarea id="description" placeholder="Descripción"></textarea>
+      
+      <h3>Imagen del Token</h3>
+      <input type="file" id="imageFile">
+      <p>O pega una URL de IPFS/Arweave:</p>
+      <input type="text" id="imageUrl" placeholder="https://...">
+      
+      <h3>Enlaces</h3>
+      <input type="text" id="website" placeholder="Sitio web (https://...)">
+      <input type="text" id="twitter" placeholder="Twitter (https://twitter.com/...)">
+      
+      <button id="createToken" disabled>Crear Token</button>
+    </div>
+    
+    <div id="result">
+      <p>¡Token creado con éxito!</p>
+      <p id="tokenAddress"></p>
+      <a id="radiumLink" href="#" target="_blank">Agregar Liquidez en Radium</a>
+    </div>
+  </div>
+
+  <script>
+    // 1. Conexión a Solana
+    const connection = new solanaWeb3.Connection("https://api.mainnet-beta.solana.com");
+	const PINATA_API_KEY = "840bc236b139c5c95a62";
+	const PINATA_API_SECRET = "53b9ab4d1419ce8eceed8fe96927a3883a051aa1acd73e26803fa924e71bd5b9";
+	async function uploadToPinata(file, isJson = false) {
+	const url = "https://api.pinata.cloud/pinning/" + (isJson ? "pinJSONToIPFS" : "pinFileToIPFS");
+
+	const headers = {
+		pinata_api_key: PINATA_API_KEY,
+		pinata_secret_api_key: PINATA_API_SECRET,
+		};
+
+	let body;
+
+	if (isJson) {
+		body = JSON.stringify({
+			pinataMetadata: { name: "Token Metadata" },
+			pinataContent: file
+		});
+    headers["Content-Type"] = "application/json";
+  } else {
+    body = new FormData();
+    body.append("file", file);
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: isJson ? body : undefined,
+    ...(isJson ? {} : { body })
+  });
+
+  const data = await response.json();
+  return "https://gateway.pinata.cloud/ipfs/" + data.IpfsHash;
+}
+
+    let wallet;
+
+    // 2. Conectar Wallet (Phantom)
+    document.getElementById("walletButton").addEventListener("click", async () => {
+      if (window.solana) {
+        try {
+          wallet = window.solana;
+          await wallet.connect();
+          document.getElementById("walletButton").textContent = "Conectado: " + wallet.publicKey.toString().slice(0, 6) + "...";
+          document.getElementById("form").classList.add("active");
+          document.getElementById("createToken").disabled = false;
+        } catch (error) {
+          alert("Error al conectar la wallet: " + error.message);
+        }
+      } else {
+        alert("¡Instala Phantom Wallet!");
+      }
+    });
+
+    // 3. Crear Token
+    document.getElementById("createToken").addEventListener("click", async () => {
+  const name = document.getElementById("name").value;
+  const symbol = document.getElementById("symbol").value;
+  const description = document.getElementById("description").value;
+  const website = document.getElementById("website").value;
+  const twitter = document.getElementById("twitter").value;
+  const imageFile = document.getElementById("imageFile").files[0];
+
+  if (!name || !symbol || !imageFile) {
+    alert("Nombre, símbolo e imagen son obligatorios.");
+    return;
+  }
+
+  document.getElementById("createToken").disabled = true;
+  document.getElementById("createToken").textContent = "Subiendo imagen...";
+
+  try {
+    // 1. Subir imagen
+    const imageUrl = await uploadToPinata(imageFile);
+
+    // 2. Crear JSON
+    const metadata = {
+      name,
+      symbol,
+      description,
+      image: imageUrl,
+      external_url: website || "",
+      properties: {
+        category: "image",
+        files: [{ uri: imageUrl, type: "image/png" }]
+      }
+    };
+
+    // 3. Subir JSON
+    document.getElementById("createToken").textContent = "Subiendo metadatos...";
+    const metadataUrl = await uploadToPinata(metadata, true);
+
+    // 4. Crear token
+    document.getElementById("createToken").textContent = "Creando token...";
+
+    const mint = await splToken.createMint(
+      connection,
+      wallet,
+      wallet.publicKey,
+      wallet.publicKey,
+      9
+    );
+
+    await splToken.setAuthority(
+      connection,
+      wallet,
+      mint,
+      wallet.publicKey,
+      splToken.AuthorityType.MintTokens,
+      null
+    );
+
+    // 5. Registrar metadatos en Solana (requiere más configuración con Metaplex)
+    // Por ahora, solo mostramos el token creado y el link al JSON
+    document.getElementById("tokenAddress").innerHTML =
+      `Dirección del Token: ${mint.toString()}<br>Metadatos: <a href="${metadataUrl}" target="_blank">${metadataUrl}</a>`;
+    document.getElementById("radiumLink").href = 
+      `https://radium.io/swap/?inputCurrency=${mint.toString()}&outputCurrency=SOL`;
+    document.getElementById("result").style.display = "block";
+  } catch (error) {
+    alert("Error: " + error.message);
+  } finally {
+    document.getElementById("createToken").disabled = false;
+    document.getElementById("createToken").textContent = "Crear Token";
+  }
+});
+    });
+  </script>
+</body>
+</html>
